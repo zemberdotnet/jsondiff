@@ -1,7 +1,9 @@
 package jsondiff
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"strings"
 )
 
@@ -74,4 +76,42 @@ func (p *Patch) append(typ string, from, path pointer, src, tgt interface{}) Pat
 		OldValue: src,
 		Value:    tgt,
 	})
+}
+
+// Encode with options wraps json.Encode
+func (p Patch) EncodeWithOptions(w io.Writer, escapeHTML bool, prefix string, indent string) error {
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent(prefix, indent)
+	if escapeHTML {
+		return encoder.Encode(p)
+	} else {
+		up := make(unescapedPatch, 0, len(p))
+		for _, patch := range p {
+			up = append(up, unescapedOperation(patch))
+		}
+
+		encoder.SetEscapeHTML(escapeHTML)
+		return encoder.Encode(up)
+	}
+
+}
+
+type unescapedPatch []unescapedOperation
+type unescapedOperation Operation
+
+// MarshallJSON implements the json.Marshaller interface for unescaped operations
+func (uo unescapedOperation) MarshalJSON() ([]byte, error) {
+	buf := new(bytes.Buffer)
+
+	type u unescapedOperation
+	encoder := json.NewEncoder(buf)
+	encoder.SetEscapeHTML(false)
+
+	err := encoder.Encode(u(uo))
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+
 }
